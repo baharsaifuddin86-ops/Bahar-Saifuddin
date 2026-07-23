@@ -319,7 +319,7 @@ export default function App() {
       </main>
 
       {/* Audio Player in Floating Control */}
-      <AudioPlayer autoPlayRequest={false} />
+      <AudioPlayer autoPlayRequest={true} />
 
       {/* Footer */}
       <footer className="py-4 px-4 border-t border-white/10 bg-white/5 backdrop-blur-xl text-center text-xs text-white/60 relative z-10">

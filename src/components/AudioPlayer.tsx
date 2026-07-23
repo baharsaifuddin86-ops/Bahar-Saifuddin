@@ -120,8 +120,8 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({ autoPlayRequest }) => 
         htmlAudioRef.current.play().then(() => {
           setIsPlaying(true);
           isPlayingRef.current = true;
-        }).catch(() => {
-          // If custom fails, fallback
+        }).catch((err) => {
+          console.warn('Autoplay blocked for custom audio:', err);
         });
       }
       return;
@@ -132,8 +132,17 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({ autoPlayRequest }) => 
       audioCtxRef.current = new AudioCtx();
     }
 
+    if (audioCtxRef.current.state === 'suspended') {
+      audioCtxRef.current.resume();
+    }
+
     isPlayingRef.current = true;
     setIsPlaying(true);
+
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
 
     let noteIdx = 0;
 
@@ -221,10 +230,40 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({ autoPlayRequest }) => 
   };
 
   useEffect(() => {
-    if (autoPlayRequest && !isPlaying) {
-      startMusicLoop();
-    }
-  }, [autoPlayRequest]);
+    let attempted = false;
+
+    const tryAutoPlay = () => {
+      if (!isPlayingRef.current) {
+        startMusicLoop();
+      }
+    };
+
+    // Attempt direct autoplay
+    const timer = setTimeout(() => {
+      tryAutoPlay();
+    }, 500);
+
+    // Fallback on first user gesture if browser blocked direct autoplay
+    const handleFirstGesture = () => {
+      if (!isPlayingRef.current) {
+        startMusicLoop();
+      }
+      window.removeEventListener('pointerdown', handleFirstGesture);
+      window.removeEventListener('click', handleFirstGesture);
+      window.removeEventListener('touchstart', handleFirstGesture);
+    };
+
+    window.addEventListener('pointerdown', handleFirstGesture, { once: true });
+    window.addEventListener('click', handleFirstGesture, { once: true });
+    window.addEventListener('touchstart', handleFirstGesture, { once: true });
+
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('pointerdown', handleFirstGesture);
+      window.removeEventListener('click', handleFirstGesture);
+      window.removeEventListener('touchstart', handleFirstGesture);
+    };
+  }, [autoPlayRequest, customAudioUrl]);
 
   useEffect(() => {
     return () => {
