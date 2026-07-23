@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Volume2, VolumeX, Music, Settings, Upload, X, Check, RotateCcw } from 'lucide-react';
+import { loadSettingFromStorage, saveSettingToStorage } from '../utils/db';
 
 interface AudioPlayerProps {
   autoPlayRequest?: boolean;
@@ -14,6 +15,23 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({ autoPlayRequest }) => 
   const [customAudioTitle, setCustomAudioTitle] = useState<string>(() => {
     return localStorage.getItem('laila_custom_bg_music_title') || 'Melodi Ulang Tahun Laila';
   });
+
+  // Load custom music from IndexedDB on mount
+  useEffect(() => {
+    let isMounted = true;
+    Promise.all([
+      loadSettingFromStorage('laila_custom_bg_music'),
+      loadSettingFromStorage('laila_custom_bg_music_title')
+    ]).then(([url, title]) => {
+      if (isMounted) {
+        if (url) setCustomAudioUrl(url);
+        if (title) setCustomAudioTitle(title);
+      }
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const [showModal, setShowModal] = useState(false);
   const [inputUrl, setInputUrl] = useState('');
@@ -166,20 +184,13 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({ autoPlayRequest }) => 
       const reader = new FileReader();
       reader.onloadend = () => {
         const audioData = reader.result as string;
-        try {
-          localStorage.setItem('laila_custom_bg_music', audioData);
-          localStorage.setItem('laila_custom_bg_music_title', file.name);
-        } catch {
-          // quota fallback using Blob URL
-          const blobUrl = URL.createObjectURL(file);
-          localStorage.setItem('laila_custom_bg_music', blobUrl);
-          localStorage.setItem('laila_custom_bg_music_title', file.name);
-        }
+        saveSettingToStorage('laila_custom_bg_music', audioData);
+        saveSettingToStorage('laila_custom_bg_music_title', file.name);
 
         stopMusicLoop();
-        setCustomAudioUrl(reader.result as string);
+        setCustomAudioUrl(audioData);
         setCustomAudioTitle(file.name);
-        setUploadSuccessMsg('Lagu berhasil diganti! Sila putar musik.');
+        setUploadSuccessMsg('Lagu berhasil diganti & tersimpan otomatis! Sila putar musik.');
         setTimeout(() => setUploadSuccessMsg(''), 3000);
       };
       reader.readAsDataURL(file);
@@ -192,12 +203,8 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({ autoPlayRequest }) => 
     const title = 'Musik Pilihan (URL)';
     setCustomAudioUrl(inputUrl.trim());
     setCustomAudioTitle(title);
-    try {
-      localStorage.setItem('laila_custom_bg_music', inputUrl.trim());
-      localStorage.setItem('laila_custom_bg_music_title', title);
-    } catch (e) {
-      console.warn('Storage warn:', e);
-    }
+    saveSettingToStorage('laila_custom_bg_music', inputUrl.trim());
+    saveSettingToStorage('laila_custom_bg_music_title', title);
     setInputUrl('');
     setUploadSuccessMsg('URL Musik berhasil disimpan!');
     setTimeout(() => setUploadSuccessMsg(''), 3000);
@@ -207,8 +214,8 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({ autoPlayRequest }) => 
     stopMusicLoop();
     setCustomAudioUrl(null);
     setCustomAudioTitle('Melodi Ulang Tahun Laila');
-    localStorage.removeItem('laila_custom_bg_music');
-    localStorage.removeItem('laila_custom_bg_music_title');
+    saveSettingToStorage('laila_custom_bg_music', null);
+    saveSettingToStorage('laila_custom_bg_music_title', null);
     setUploadSuccessMsg('Kembali ke Melodi bawaan!');
     setTimeout(() => setUploadSuccessMsg(''), 3000);
   };

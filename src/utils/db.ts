@@ -1,8 +1,9 @@
 import { PhotoMemory } from '../types';
 
 const DB_NAME = 'LailaMemoriesDB';
-const STORE_NAME = 'memories';
-const DB_VERSION = 1;
+const STORE_MEMORIES = 'memories';
+const STORE_SETTINGS = 'settings';
+const DB_VERSION = 2;
 
 function openDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -11,10 +12,13 @@ function openDB(): Promise<IDBDatabase> {
       return;
     }
     const request = indexedDB.open(DB_NAME, DB_VERSION);
-    request.onupgradeneeded = () => {
+    request.onupgradeneeded = (event) => {
       const db = request.result;
-      if (!db.objectStoreNames.contains(STORE_NAME)) {
-        db.createObjectStore(STORE_NAME, { keyPath: 'id' });
+      if (!db.objectStoreNames.contains(STORE_MEMORIES)) {
+        db.createObjectStore(STORE_MEMORIES, { keyPath: 'id' });
+      }
+      if (!db.objectStoreNames.contains(STORE_SETTINGS)) {
+        db.createObjectStore(STORE_SETTINGS);
       }
     };
     request.onsuccess = () => resolve(request.result);
@@ -22,11 +26,12 @@ function openDB(): Promise<IDBDatabase> {
   });
 }
 
+// Memory CRUD
 export async function saveMemoriesToStorage(memories: PhotoMemory[]): Promise<void> {
   try {
     const db = await openDB();
-    const tx = db.transaction(STORE_NAME, 'readwrite');
-    const store = tx.objectStore(STORE_NAME);
+    const tx = db.transaction(STORE_MEMORIES, 'readwrite');
+    const store = tx.objectStore(STORE_MEMORIES);
     
     await new Promise<void>((resolve, reject) => {
       const clearReq = store.clear();
@@ -48,22 +53,22 @@ export async function saveMemoriesToStorage(memories: PhotoMemory[]): Promise<vo
       clearReq.onerror = () => reject(clearReq.error);
     });
   } catch (e) {
-    console.warn('Gagal menyimpan ke IndexedDB, menggunakan localStorage fallback:', e);
+    console.warn('Gagal menyimpan ke IndexedDB:', e);
   }
 
   // Backup fallback to localStorage
   try {
     localStorage.setItem('laila_memories_data', JSON.stringify(memories));
   } catch (e) {
-    console.warn('Quota localStorage terlampaui, data disimpan via IndexedDB:', e);
+    console.warn('Quota localStorage terlampaui:', e);
   }
 }
 
 export async function loadMemoriesFromStorage(): Promise<PhotoMemory[] | null> {
   try {
     const db = await openDB();
-    const tx = db.transaction(STORE_NAME, 'readonly');
-    const store = tx.objectStore(STORE_NAME);
+    const tx = db.transaction(STORE_MEMORIES, 'readonly');
+    const store = tx.objectStore(STORE_MEMORIES);
     
     const result = await new Promise<PhotoMemory[]>((resolve, reject) => {
       const req = store.getAll();
@@ -75,7 +80,7 @@ export async function loadMemoriesFromStorage(): Promise<PhotoMemory[] | null> {
       return result;
     }
   } catch (e) {
-    console.warn('Gagal membaca dari IndexedDB, menggunakan localStorage fallback:', e);
+    console.warn('Gagal membaca dari IndexedDB:', e);
   }
 
   const saved = localStorage.getItem('laila_memories_data');
@@ -87,4 +92,50 @@ export async function loadMemoriesFromStorage(): Promise<PhotoMemory[] | null> {
     }
   }
   return null;
+}
+
+// Settings (Banner, Music, etc.)
+export async function saveSettingToStorage(key: string, value: string | null): Promise<void> {
+  try {
+    const db = await openDB();
+    const tx = db.transaction(STORE_SETTINGS, 'readwrite');
+    const store = tx.objectStore(STORE_SETTINGS);
+    if (value === null) {
+      store.delete(key);
+    } else {
+      store.put(value, key);
+    }
+  } catch (e) {
+    console.warn(`Gagal menyimpan setting ${key} ke IndexedDB:`, e);
+  }
+
+  try {
+    if (value === null) {
+      localStorage.removeItem(key);
+    } else {
+      localStorage.setItem(key, value);
+    }
+  } catch (e) {
+    console.warn(`Gagal menyimpan setting ${key} ke localStorage:`, e);
+  }
+}
+
+export async function loadSettingFromStorage(key: string): Promise<string | null> {
+  try {
+    const db = await openDB();
+    const tx = db.transaction(STORE_SETTINGS, 'readonly');
+    const store = tx.objectStore(STORE_SETTINGS);
+    const result = await new Promise<string | null>((resolve, reject) => {
+      const req = store.get(key);
+      req.onsuccess = () => resolve(req.result ?? null);
+      req.onerror = () => reject(req.error);
+    });
+    if (result !== null) {
+      return result;
+    }
+  } catch (e) {
+    console.warn(`Gagal membaca setting ${key} dari IndexedDB:`, e);
+  }
+
+  return localStorage.getItem(key);
 }

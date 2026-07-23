@@ -1,13 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import confetti from 'canvas-confetti';
-import { Heart, Sparkles, Camera, PartyPopper } from 'lucide-react';
+import { Heart, Sparkles, Camera, PartyPopper, Edit3, Upload, X, RotateCcw, Video, Image as ImageIcon } from 'lucide-react';
 import { FloatingParticles } from './components/FloatingParticles';
 import { AudioPlayer } from './components/AudioPlayer';
 import { PolaroidGallery } from './components/PolaroidGallery';
 import { INITIAL_MEMORIES } from './data/memories';
 import { PhotoMemory } from './types';
-import { loadMemoriesFromStorage, saveMemoriesToStorage } from './utils/db';
+import { loadMemoriesFromStorage, saveMemoriesToStorage, loadSettingFromStorage, saveSettingToStorage } from './utils/db';
+
+const DEFAULT_BANNER = '/src/assets/images/birthday_banner_1784826645609.jpg';
 
 export default function App() {
   const [memories, setMemories] = useState<PhotoMemory[]>(() => {
@@ -22,16 +24,42 @@ export default function App() {
     return INITIAL_MEMORIES;
   });
 
+  const [bannerUrl, setBannerUrl] = useState<string>(() => {
+    return localStorage.getItem('laila_banner_url') || DEFAULT_BANNER;
+  });
+  const [isBannerVideo, setIsBannerVideo] = useState<boolean>(() => {
+    return localStorage.getItem('laila_is_banner_video') === 'true';
+  });
+
+  const [showBannerModal, setShowBannerModal] = useState(false);
+  const [bannerInputUrl, setBannerInputUrl] = useState('');
+  const [bannerPreview, setBannerPreview] = useState(bannerUrl);
+  const [bannerPreviewIsVideo, setBannerPreviewIsVideo] = useState(isBannerVideo);
+  const [bannerToastMsg, setBannerToastMsg] = useState('');
+
   const [isStorageLoaded, setIsStorageLoaded] = useState(false);
   const [activeTab, setActiveTab] = useState<'all' | 'greeting' | 'gallery'>('all');
 
   // Load from IndexedDB on initial mount
   useEffect(() => {
     let isMounted = true;
-    loadMemoriesFromStorage().then((data) => {
+    Promise.all([
+      loadMemoriesFromStorage(),
+      loadSettingFromStorage('laila_banner_url'),
+      loadSettingFromStorage('laila_is_banner_video')
+    ]).then(([memData, bannerData, bannerVideoData]) => {
       if (isMounted) {
-        if (data && data.length > 0) {
-          setMemories(data);
+        if (memData && memData.length > 0) {
+          setMemories(memData);
+        }
+        if (bannerData) {
+          setBannerUrl(bannerData);
+          setBannerPreview(bannerData);
+        }
+        if (bannerVideoData !== null) {
+          const isVid = bannerVideoData === 'true';
+          setIsBannerVideo(isVid);
+          setBannerPreviewIsVideo(isVid);
         }
         setIsStorageLoaded(true);
       }
@@ -41,12 +69,56 @@ export default function App() {
     };
   }, []);
 
-  // Save to IndexedDB & localStorage on memories change AFTER initial load completes
+  // Save memories to IndexedDB & localStorage on change
   useEffect(() => {
     if (isStorageLoaded) {
       saveMemoriesToStorage(memories);
     }
   }, [memories, isStorageLoaded]);
+
+  const handleBannerFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.type.startsWith('video/')) {
+      setBannerPreviewIsVideo(true);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setBannerPreview(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    } else {
+      setBannerPreviewIsVideo(false);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setBannerPreview(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleSaveBanner = () => {
+    const finalUrl = bannerInputUrl.trim() || bannerPreview;
+    setBannerUrl(finalUrl);
+    setIsBannerVideo(bannerPreviewIsVideo);
+    saveSettingToStorage('laila_banner_url', finalUrl);
+    saveSettingToStorage('laila_is_banner_video', bannerPreviewIsVideo ? 'true' : 'false');
+    setShowBannerModal(false);
+    setBannerInputUrl('');
+    setBannerToastMsg('✨ Banner berhasil disimpan otomatis!');
+    setTimeout(() => setBannerToastMsg(''), 3000);
+  };
+
+  const handleResetBanner = () => {
+    setBannerUrl(DEFAULT_BANNER);
+    setIsBannerVideo(false);
+    setBannerPreview(DEFAULT_BANNER);
+    setBannerPreviewIsVideo(false);
+    saveSettingToStorage('laila_banner_url', null);
+    saveSettingToStorage('laila_is_banner_video', null);
+    setBannerToastMsg('Banner dikembalikan ke posisi semula!');
+    setTimeout(() => setBannerToastMsg(''), 3000);
+  };
 
   // Initial greeting confetti trigger
   useEffect(() => {
@@ -128,15 +200,34 @@ export default function App() {
             transition={{ duration: 0.6 }}
             className="lg:col-span-6 flex flex-col justify-center"
           >
-            {/* Banner Image */}
-            <div className="relative mb-4 rounded-3xl overflow-hidden glass-panel p-2 shadow-2xl">
-              <div className="relative rounded-2xl overflow-hidden aspect-[21/9]">
-                <img
-                  src="/src/assets/images/birthday_banner_1784826645609.jpg"
-                  alt="Laila Birthday Banner"
-                  referrerPolicy="no-referrer"
-                  className="w-full h-full object-cover"
-                />
+            {/* Toast Notification for Banner */}
+            {bannerToastMsg && (
+              <div className="mb-3 px-3 py-1.5 rounded-full bg-emerald-500/20 border border-emerald-400/40 text-emerald-200 text-xs font-semibold text-center animate-fade-in flex items-center justify-center gap-1.5 shadow-lg">
+                <span>{bannerToastMsg}</span>
+              </div>
+            )}
+
+            {/* Banner Container with Edit Button */}
+            <div className="relative mb-4 rounded-3xl overflow-hidden glass-panel p-2 shadow-2xl group">
+              <div className="relative rounded-2xl overflow-hidden aspect-[21/9] bg-slate-900">
+                {isBannerVideo ? (
+                  <video
+                    src={bannerUrl}
+                    className="w-full h-full object-cover"
+                    autoPlay
+                    loop
+                    muted
+                    playsInline
+                  />
+                ) : (
+                  <img
+                    src={bannerUrl}
+                    alt="Laila Birthday Banner"
+                    referrerPolicy="no-referrer"
+                    className="w-full h-full object-cover"
+                  />
+                )}
+
                 <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-950/30 to-transparent flex flex-col justify-end p-4 text-white">
                   <span className="px-3 py-0.5 bg-white/20 backdrop-blur-md rounded-full text-[10px] font-semibold uppercase tracking-widest w-fit mb-1 border border-white/30">
                     Happy Birthday 🎉
@@ -145,6 +236,20 @@ export default function App() {
                     Selamat Ulang Tahun, Laila! 🌹
                   </h2>
                 </div>
+
+                {/* Edit Banner Button */}
+                <button
+                  onClick={() => {
+                    setBannerPreview(bannerUrl);
+                    setBannerPreviewIsVideo(isBannerVideo);
+                    setShowBannerModal(true);
+                  }}
+                  className="absolute top-3 right-3 px-2.5 py-1.5 rounded-full bg-slate-950/70 hover:bg-slate-950/90 backdrop-blur-md text-white text-xs font-medium border border-white/30 flex items-center gap-1.5 shadow-lg transition-transform hover:scale-105 z-10 opacity-90 group-hover:opacity-100"
+                  title="Ganti Gambar / Video Banner Sampul"
+                >
+                  <Edit3 className="w-3.5 h-3.5 text-[#ff9a9e]" />
+                  <span className="hidden sm:inline">Ganti Banner</span>
+                </button>
               </div>
             </div>
 
@@ -225,6 +330,147 @@ export default function App() {
           </p>
         </div>
       </footer>
+
+      {/* Modal Edit Banner */}
+      {showBannerModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-fade-in">
+          <motion.div
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="max-w-lg w-full glass-panel p-5 rounded-3xl border border-white/30 shadow-2xl relative"
+          >
+            <div className="flex items-center justify-between pb-3 border-b border-white/20">
+              <h3 className="text-base font-serif font-bold text-white flex items-center gap-2">
+                <Edit3 className="w-4 h-4 text-[#ff9a9e]" />
+                <span>Ganti Foto / Video Banner Sampul</span>
+              </h3>
+              <button
+                onClick={() => setShowBannerModal(false)}
+                className="p-1 rounded-full text-white/60 hover:text-white hover:bg-white/10 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4 my-4">
+              {/* Preview Box */}
+              <div>
+                <label className="block text-xs font-semibold text-white/80 mb-2">
+                  Pratinjau Banner
+                </label>
+                <div className="relative rounded-2xl overflow-hidden aspect-[21/9] bg-slate-900 border border-white/20">
+                  {bannerPreviewIsVideo ? (
+                    <video
+                      src={bannerPreview}
+                      className="w-full h-full object-cover"
+                      controls
+                    />
+                  ) : (
+                    <img
+                      src={bannerPreview}
+                      alt="Banner Preview"
+                      referrerPolicy="no-referrer"
+                      className="w-full h-full object-cover"
+                    />
+                  )}
+                </div>
+              </div>
+
+              {/* Upload Input */}
+              <div>
+                <label className="block text-xs font-semibold text-white/80 mb-1.5">
+                  Unggah dari Perangkat
+                </label>
+                <label className="w-full py-2 px-3 glass-button-primary text-slate-900 font-bold rounded-xl text-xs flex items-center justify-center gap-2 cursor-pointer shadow-md hover:scale-[1.01] transition-transform">
+                  <Upload className="w-4 h-4 text-slate-900" />
+                  <span>Pilih Foto / Video Banner</span>
+                  <input
+                    type="file"
+                    accept="image/*,video/*"
+                    onChange={handleBannerFileChange}
+                    className="hidden"
+                  />
+                </label>
+              </div>
+
+              {/* URL Input */}
+              <div>
+                <label className="block text-xs font-semibold text-white/80 mb-1.5">
+                  Atau Gunakan Link / URL
+                </label>
+                <input
+                  type="text"
+                  value={bannerInputUrl}
+                  onChange={(e) => {
+                    const url = e.target.value;
+                    setBannerInputUrl(url);
+                    if (url) {
+                      setBannerPreview(url);
+                      if (url.match(/\.(mp4|webm|ogg|mov)($|\?)/i)) {
+                        setBannerPreviewIsVideo(true);
+                      }
+                    }
+                  }}
+                  placeholder="https://..."
+                  className="w-full px-3 py-2 rounded-xl glass-input text-xs text-white"
+                />
+              </div>
+
+              {/* Banner Type Option */}
+              <div className="flex items-center gap-4 text-xs text-white/80 pt-1">
+                <span className="text-[11px] text-white/60">Tipe File:</span>
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="bannerMediaType"
+                    checked={!bannerPreviewIsVideo}
+                    onChange={() => setBannerPreviewIsVideo(false)}
+                    className="accent-[#ff9a9e]"
+                  />
+                  <span>Foto 📷</span>
+                </label>
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="bannerMediaType"
+                    checked={bannerPreviewIsVideo}
+                    onChange={() => setBannerPreviewIsVideo(true)}
+                    className="accent-[#ff9a9e]"
+                  />
+                  <span>Video 🎥</span>
+                </label>
+              </div>
+            </div>
+
+            {/* Modal Actions */}
+            <div className="flex items-center justify-between pt-3 border-t border-white/20">
+              <button
+                onClick={handleResetBanner}
+                className="px-3 py-1.5 text-xs text-white/70 hover:text-white flex items-center gap-1 hover:bg-white/10 rounded-xl transition-colors"
+                title="Kembalikan ke gambar awal"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>Reset Bawaan</span>
+              </button>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setShowBannerModal(false)}
+                  className="px-3.5 py-1.5 text-xs text-white/70 hover:text-white"
+                >
+                  Batal
+                </button>
+                <button
+                  onClick={handleSaveBanner}
+                  className="px-4 py-1.5 glass-button-primary text-slate-900 font-bold rounded-xl text-xs shadow-lg"
+                >
+                  Simpan Banner
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      )}
     </div>
   );
 }
