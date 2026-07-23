@@ -1,0 +1,6 @@
+{
+  "name": "Selamat Ulang Tahun Laila Nur Azizah",
+  "description": "Aplikasi Ucapan Ulang Tahun Sederhana & Estetik dengan Galeri Foto untuk Laila Nur Azizah.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
