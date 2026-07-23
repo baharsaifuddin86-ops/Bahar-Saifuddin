@@ -7,6 +7,7 @@ import { AudioPlayer } from './components/AudioPlayer';
 import { PolaroidGallery } from './components/PolaroidGallery';
 import { INITIAL_MEMORIES } from './data/memories';
 import { PhotoMemory } from './types';
+import { loadMemoriesFromStorage, saveMemoriesToStorage } from './utils/db';
 
 export default function App() {
   const [memories, setMemories] = useState<PhotoMemory[]>(() => {
@@ -21,15 +22,31 @@ export default function App() {
     return INITIAL_MEMORIES;
   });
 
+  const [isStorageLoaded, setIsStorageLoaded] = useState(false);
   const [activeTab, setActiveTab] = useState<'all' | 'greeting' | 'gallery'>('all');
 
+  // Load from IndexedDB on initial mount
   useEffect(() => {
-    try {
-      localStorage.setItem('laila_memories_data', JSON.stringify(memories));
-    } catch (e) {
-      console.warn('Gagal menyimpan ke localStorage karena kuota penuh:', e);
+    let isMounted = true;
+    loadMemoriesFromStorage().then((data) => {
+      if (isMounted) {
+        if (data && data.length > 0) {
+          setMemories(data);
+        }
+        setIsStorageLoaded(true);
+      }
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  // Save to IndexedDB & localStorage on memories change AFTER initial load completes
+  useEffect(() => {
+    if (isStorageLoaded) {
+      saveMemoriesToStorage(memories);
     }
-  }, [memories]);
+  }, [memories, isStorageLoaded]);
 
   // Initial greeting confetti trigger
   useEffect(() => {

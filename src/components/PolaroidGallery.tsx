@@ -67,14 +67,19 @@ export const PolaroidGallery: React.FC<PolaroidGalleryProps> = ({
     setCurrentIndex((prev) => (prev - 1 + filteredMemories.length) % filteredMemories.length);
   };
 
+  const [toastMsg, setToastMsg] = useState('');
+
   const handleMediaFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     if (file.type.startsWith('video/')) {
       setIsVideoMedia(true);
-      const videoUrl = URL.createObjectURL(file);
-      setPreviewImage(videoUrl);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setPreviewImage(reader.result as string);
+      };
+      reader.readAsDataURL(file);
     } else {
       setIsVideoMedia(false);
       const reader = new FileReader();
@@ -132,6 +137,8 @@ export const PolaroidGallery: React.FC<PolaroidGalleryProps> = ({
     };
     onUpdateMemory(updated);
     setEditingMemory(null);
+    setToastMsg('✨ Foto/Video berhasil disimpan!');
+    setTimeout(() => setToastMsg(''), 3000);
     confetti({
       particleCount: 40,
       spread: 60,
@@ -167,6 +174,13 @@ export const PolaroidGallery: React.FC<PolaroidGalleryProps> = ({
 
   return (
     <div className="w-full flex flex-col justify-center">
+      {/* Toast Notification */}
+      {toastMsg && (
+        <div className="mb-3 px-3 py-1.5 rounded-full bg-emerald-500/20 border border-emerald-400/40 text-emerald-200 text-xs font-semibold text-center animate-fade-in flex items-center justify-center gap-1.5 shadow-lg">
+          <span>{toastMsg}</span>
+        </div>
+      )}
+
       {/* Controls Bar */}
       <div className="flex items-center justify-between gap-3 mb-4">
         {/* View Mode Toggle */}
