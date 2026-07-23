@@ -114,15 +114,18 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({ autoPlayRequest }) => 
     }
   };
 
-  const startMusicLoop = () => {
+  const startMusicLoop = async () => {
     if (customAudioUrl) {
       if (htmlAudioRef.current) {
-        htmlAudioRef.current.play().then(() => {
+        try {
+          await htmlAudioRef.current.play();
           setIsPlaying(true);
           isPlayingRef.current = true;
-        }).catch((err) => {
+        } catch (err) {
           console.warn('Autoplay blocked for custom audio:', err);
-        });
+          setIsPlaying(false);
+          isPlayingRef.current = false;
+        }
       }
       return;
     }
@@ -133,7 +136,11 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({ autoPlayRequest }) => 
     }
 
     if (audioCtxRef.current.state === 'suspended') {
-      audioCtxRef.current.resume();
+      try {
+        await audioCtxRef.current.resume();
+      } catch (err) {
+        console.warn('Web Audio resume failed:', err);
+      }
     }
 
     isPlayingRef.current = true;
@@ -230,38 +237,31 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({ autoPlayRequest }) => 
   };
 
   useEffect(() => {
-    let attempted = false;
-
-    const tryAutoPlay = () => {
-      if (!isPlayingRef.current) {
-        startMusicLoop();
-      }
-    };
-
-    // Attempt direct autoplay
+    // Attempt immediate autoplay
     const timer = setTimeout(() => {
-      tryAutoPlay();
-    }, 500);
-
-    // Fallback on first user gesture if browser blocked direct autoplay
-    const handleFirstGesture = () => {
       if (!isPlayingRef.current) {
         startMusicLoop();
       }
-      window.removeEventListener('pointerdown', handleFirstGesture);
-      window.removeEventListener('click', handleFirstGesture);
-      window.removeEventListener('touchstart', handleFirstGesture);
+    }, 300);
+
+    // Continuous gesture handler to ensure playback starts on first tap/click/scroll if blocked
+    const handleGesture = () => {
+      if (!isPlayingRef.current) {
+        startMusicLoop();
+      }
     };
 
-    window.addEventListener('pointerdown', handleFirstGesture, { once: true });
-    window.addEventListener('click', handleFirstGesture, { once: true });
-    window.addEventListener('touchstart', handleFirstGesture, { once: true });
+    window.addEventListener('pointerdown', handleGesture);
+    window.addEventListener('click', handleGesture);
+    window.addEventListener('touchstart', handleGesture);
+    window.addEventListener('scroll', handleGesture, { passive: true });
 
     return () => {
       clearTimeout(timer);
-      window.removeEventListener('pointerdown', handleFirstGesture);
-      window.removeEventListener('click', handleFirstGesture);
-      window.removeEventListener('touchstart', handleFirstGesture);
+      window.removeEventListener('pointerdown', handleGesture);
+      window.removeEventListener('click', handleGesture);
+      window.removeEventListener('touchstart', handleGesture);
+      window.removeEventListener('scroll', handleGesture);
     };
   }, [autoPlayRequest, customAudioUrl]);
 
@@ -279,6 +279,16 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({ autoPlayRequest }) => 
           ref={htmlAudioRef}
           src={customAudioUrl}
           loop
+          autoPlay
+          playsInline
+          onPlay={() => {
+            setIsPlaying(true);
+            isPlayingRef.current = true;
+          }}
+          onPause={() => {
+            setIsPlaying(false);
+            isPlayingRef.current = false;
+          }}
           onEnded={() => setIsPlaying(false)}
         />
       )}
